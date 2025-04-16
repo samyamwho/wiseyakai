@@ -1,11 +1,10 @@
-/* eslint-disable prefer-const */
-/* eslint-disable no-prototype-builtins */
 import { type ClassValue, clsx } from "clsx";
 import qs from "qs";
 import { twMerge } from "tailwind-merge";
 
 import { aspectRatioOptions } from "@/constants";
 
+// CLASSNAMES MERGE
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
@@ -13,15 +12,12 @@ export function cn(...inputs: ClassValue[]) {
 // ERROR HANDLER
 export const handleError = (error: unknown) => {
   if (error instanceof Error) {
-    // This is a native JavaScript error (e.g., TypeError, RangeError)
     console.error(error.message);
     throw new Error(`Error: ${error.message}`);
   } else if (typeof error === "string") {
-    // This is a string error message
     console.error(error);
     throw new Error(`Error: ${error}`);
   } else {
-    // This is an unknown type of error
     console.error(error);
     throw new Error(`Unknown error: ${JSON.stringify(error)}`);
   }
@@ -50,14 +46,17 @@ const toBase64 = (str: string) =>
 export const dataUrl = `data:image/svg+xml;base64,${toBase64(
   shimmer(1000, 1000)
 )}`;
-// ==== End
 
 // FORM URL QUERY
 export const formUrlQuery = ({
   searchParams,
   key,
   value,
-}: FormUrlQueryParams) => {
+}: {
+  searchParams: URLSearchParams;
+  key: string;
+  value: string | null;
+}) => {
   const params = { ...qs.parse(searchParams.toString()), [key]: value };
 
   return `${window.location.pathname}?${qs.stringify(params, {
@@ -66,23 +65,25 @@ export const formUrlQuery = ({
 };
 
 // REMOVE KEY FROM QUERY
-export function removeKeysFromQuery({
+export const removeKeysFromQuery = ({
   searchParams,
   keysToRemove,
-}: RemoveUrlQueryParams) {
+}: {
+  searchParams: string;
+  keysToRemove: string[];
+}) => {
   const currentUrl = qs.parse(searchParams);
 
   keysToRemove.forEach((key) => {
     delete currentUrl[key];
   });
 
-  // Remove null or undefined values
   Object.keys(currentUrl).forEach(
     (key) => currentUrl[key] == null && delete currentUrl[key]
   );
 
   return `${window.location.pathname}?${qs.stringify(currentUrl)}`;
-}
+};
 
 // DEBOUNCE
 export const debounce = (func: (...args: any[]) => void, delay: number) => {
@@ -93,11 +94,11 @@ export const debounce = (func: (...args: any[]) => void, delay: number) => {
   };
 };
 
-// GE IMAGE SIZE
+// GET IMAGE SIZE
 export type AspectRatioKey = keyof typeof aspectRatioOptions;
 export const getImageSize = (
   type: string,
-  image: any,
+  image: Record<string, any>,
   dimension: "width" | "height"
 ): number => {
   if (type === "fill") {
@@ -121,30 +122,32 @@ export const download = (url: string, filename: string) => {
       const blobURL = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = blobURL;
-
-      if (filename && filename.length)
-        a.download = `${filename.replace(" ", "_")}.png`;
+      a.download = `${filename.replace(/ /g, "_")}.png`;
       document.body.appendChild(a);
       a.click();
+      document.body.removeChild(a);
     })
-    .catch((error) => console.log({ error }));
+    .catch((error) => console.error({ error }));
 };
 
 // DEEP MERGE OBJECTS
-export const deepMergeObjects = (obj1: any, obj2: any) => {
-  if(obj2 === null || obj2 === undefined) {
+export const deepMergeObjects = (
+  obj1: Record<string, any>,
+  obj2: Record<string, any> | null | undefined
+) => {
+  if (obj2 == null) {
     return obj1;
   }
 
-  let output = { ...obj2 };
+  const output: Record<string, any> = { ...obj2 };
 
-  for (let key in obj1) {
-    if (obj1.hasOwnProperty(key)) {
+  for (const key in obj1) {
+    if (Object.prototype.hasOwnProperty.call(obj1, key)) {
       if (
-        obj1[key] &&
         typeof obj1[key] === "object" &&
-        obj2[key] &&
-        typeof obj2[key] === "object"
+        typeof obj2[key] === "object" &&
+        obj1[key] !== null &&
+        obj2[key] !== null
       ) {
         output[key] = deepMergeObjects(obj1[key], obj2[key]);
       } else {
