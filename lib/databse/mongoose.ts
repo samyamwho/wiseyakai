@@ -1,21 +1,32 @@
-import mongoose, { ConnectOptions } from "mongoose";
+import mongoose, { Mongoose } from 'mongoose';
 
-let isConnected: boolean = false;
+const MONGODB_URL = process.env.MONGODB_URL;
 
-export const connectToDatabase = async (): Promise<void> => {
-  if (isConnected) return;
+interface MongooseConnection {
+  conn: Mongoose | null;
+  promise: Promise<Mongoose> | null;
+}
 
-  try {
-    const db = await mongoose.connect(process.env.MONGODB_URI as string, {
-      dbName: "wiseyakai",
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-    } as ConnectOptions);
+let cached: MongooseConnection = (global as any).mongoose
 
-    isConnected = !!db.connections[0].readyState;
-    console.log("MongoDB connected");
-  } catch (error: unknown) {
-    console.error("MongoDB connection error:", error);
-    throw new Error("Failed to connect to database");
+if(!cached) {
+  cached = (global as any).mongoose = { 
+    conn: null, promise: null 
   }
-};
+}
+
+export const connectToDatabase = async () => {
+  if(cached.conn) return cached.conn;
+
+  if(!MONGODB_URL) throw new Error('Missing MONGODB_URL');
+
+  cached.promise = 
+    cached.promise || 
+    mongoose.connect(MONGODB_URL, { 
+      dbName: 'yoshi', bufferCommands: false 
+    })
+
+  cached.conn = await cached.promise;
+
+  return cached.conn;
+}
