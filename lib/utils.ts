@@ -8,7 +8,6 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-// Generic error handler
 export const handleError = (error: unknown): never => {
   if (error instanceof Error) {
     console.error(error.message);

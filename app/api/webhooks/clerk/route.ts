@@ -1,12 +1,13 @@
 /* eslint-disable camelcase */
-import { clerkClient, WebhookEvent } from "@clerk/clerk-sdk-node";import { headers } from "next/headers";
+import { clerkClient, WebhookEvent } from "@clerk/clerk-sdk-node";
+import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { Webhook } from "svix";
 
 import { createUser, deleteUser, updateUser } from "@/lib/actions/user.action";
+import { CreateUserParams, UpdateUserParams } from "@/lib/databse/types";
 
 export async function POST(req: Request) {
-  // You can find this in the Clerk Dashboard -> Webhooks -> choose the webhook
   const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET;
 
   if (!WEBHOOK_SECRET) {
@@ -15,29 +16,23 @@ export async function POST(req: Request) {
     );
   }
 
-  // Get the headers
   const headerPayload = await headers();
   const svix_id = headerPayload.get("svix-id");
   const svix_timestamp = headerPayload.get("svix-timestamp");
   const svix_signature = headerPayload.get("svix-signature");
 
-  // If there are no headers, error out
   if (!svix_id || !svix_timestamp || !svix_signature) {
     return new Response("Error occured -- no svix headers", {
       status: 400,
     });
   }
 
-  // Get the body
   const payload = await req.json();
   const body = JSON.stringify(payload);
-
-  // Create a new Svix instance with your secret.
   const wh = new Webhook(WEBHOOK_SECRET);
 
   let evt: WebhookEvent;
 
-  // Verify the payload with the headers
   try {
     evt = wh.verify(body, {
       "svix-id": svix_id,
@@ -51,7 +46,6 @@ export async function POST(req: Request) {
     });
   }
 
-  // Get the ID and type
   const { id } = evt.data;
   const eventType = evt.type;
 
@@ -59,55 +53,75 @@ export async function POST(req: Request) {
   if (eventType === "user.created") {
     const { id, email_addresses, image_url, first_name, last_name, username } = evt.data;
 
-    const user = {
+    const userData: CreateUserParams = {
       clerkId: id,
       email: email_addresses[0].email_address,
-      username: username!,
-      firstName: first_name,
-      lastName: last_name,
-      photo: image_url,
+      username: username || email_addresses[0].email_address.split('@')[0],
+      firstName: first_name || '',
+      lastName: last_name || '',
+      photo: image_url || '',
     };
 
-    const newUser = await createUser(user);
+    console.log("CREATE - Event Data:", JSON.stringify(evt.data, null, 2));
+    console.log("CREATE - createUser Payload:", JSON.stringify(userData, null, 2));
 
-    // Set public metadata
-    if (newUser) {
+    try {
+      const newUser = await createUser(userData);
+      console.log("CREATE - createUser Result:", newUser);
+
       await clerkClient.users.updateUserMetadata(id, {
         publicMetadata: {
           userId: newUser._id,
         },
       });
-    }
 
-    return NextResponse.json({ message: "OK", user: newUser });
+      return NextResponse.json({ message: "OK", user: newUser });
+    } catch (error) {
+      console.error("CREATE - createUser Error:", error);
+      return new Response("Error creating user", { status: 500 });
+    }
   }
 
   // UPDATE
   if (eventType === "user.updated") {
     const { id, image_url, first_name, last_name, username } = evt.data;
 
-    const user = {
-      firstName: first_name,
-      lastName: last_name,
-      username: username!,
-      photo: image_url,
+    const userData: UpdateUserParams = {
+      firstName: (first_name as string | undefined) ?? '',
+      lastName: (last_name as string | undefined) ?? '',
+      username: (username as string | undefined) ?? '',
+      photo: (image_url as string | undefined) ?? '',
     };
 
-    const updatedUser = await updateUser(id, user);
+    console.log("UPDATE - Event Data:", JSON.stringify(evt.data, null, 2));
+    console.log("UPDATE - updateUser Payload:", JSON.stringify(userData, null, 2));
 
-    return NextResponse.json({ message: "OK", user: updatedUser });
+    try {
+      const updatedUser = await updateUser(id, userData);
+      console.log("UPDATE - updateUser Result:", updatedUser);
+      return NextResponse.json({ message: "OK", user: updatedUser });
+    } catch (error) {
+      console.error("UPDATE - updateUser Error:", error);
+      return new Response("Error updating user", { status: 500 });
+    }
   }
 
   // DELETE
   if (eventType === "user.deleted") {
-    const { id } = evt.data;
+    console.log("DELETE - Event Data:", JSON.stringify(evt.data, null, 2));
+    console.log("DELETE - deleteUser Clerk ID:", id);
 
-    const deletedUser = await deleteUser(id!);
-
-    return NextResponse.json({ message: "OK", user: deletedUser });
+    try {
+      const deletedUser = await deleteUser(id!);
+      console.log("DELETE - deleteUser Result:", deletedUser);
+      return NextResponse.json({ message: "OK", user: deletedUser });
+    } catch (error) {
+      console.error("DELETE - deleteUser Error:", error);
+      return new Response("Error deleting user", { status: 500 });
+    }
   }
 
-  console.log(`Webhook with and ID of ${id} and type of ${eventType}`);
+  console.log(`Webhook with an ID of ${id} and type of ${eventType}`);
   console.log("Webhook body:", body);
 
   return new Response("", { status: 200 });
